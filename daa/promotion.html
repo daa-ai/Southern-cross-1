@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Student Promotion</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1><i class="fa-solid fa-arrow-up"></i> Student Promotion</h1>
+
+        <div class="form-panel">
+            <h3>Bulk Promote by Form</h3>
+            <p style="color:#6b7280;font-size:14px;margin-top:0;">Promote all students in a form to the next form. Form 4 students will be marked as Graduated.</p>
+            <div class="form-row">
+                <select id="bulkFrom">
+                    <option value="Form 1">Form 1 → Form 2</option>
+                    <option value="Form 2">Form 2 → Form 3</option>
+                    <option value="Form 3">Form 3 → Form 4</option>
+                    <option value="Form 4">Form 4 → Graduate</option>
+                </select>
+                <button class="btn btn-blue" onclick="bulkPromote()">Promote All</button>
+            </div>
+        </div>
+
+        <div class="form-panel">
+            <h3>Promote Individual Student</h3>
+            <div class="form-row">
+                <select id="singleStudent"></select>
+                <select id="singleTo">
+                    <option value="Form 1">Form 1</option>
+                    <option value="Form 2">Form 2</option>
+                    <option value="Form 3">Form 3</option>
+                    <option value="Form 4">Form 4</option>
+                    <option value="Graduated">Graduated</option>
+                </select>
+                <button class="btn btn-blue" onclick="promoteOne()">Promote</button>
+            </div>
+        </div>
+
+        <div class="topbar">
+            <h2 style="margin:0;">Students</h2>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <select id="filterForm" onchange="renderStudents()">
+                    <option value="">All Forms</option>
+                    <option value="Form 1">Form 1</option>
+                    <option value="Form 2">Form 2</option>
+                    <option value="Form 3">Form 3</option>
+                    <option value="Form 4">Form 4</option>
+                    <option value="Graduated">Graduated</option>
+                </select>
+                <button class="btn btn-blue no-print" onclick="doExport()"><i class="fa-solid fa-download"></i> Export CSV</button>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>#</th><th>Name</th><th>Current Form</th><th>Status</th><th>Promote To</th><th>Action</th></tr></thead>
+                <tbody id="studentsTable"></tbody>
+            </table>
+            <div class="pagination" id="studentsPagination"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+initPage("admin", "promotion.html");
+
+let currentPage = 1;
+const PER_PAGE = 15;
+
+const NEXT_FORM = { "Form 1": "Form 2", "Form 2": "Form 3", "Form 3": "Form 4", "Form 4": "Graduated" };
+
+function populateSingleDropdown() {
+    const students = getStudents();
+    document.getElementById("singleStudent").innerHTML =
+        students.map((s, i) => `<option value="${i}">${esc(s.name)} (${esc(s.grade)})</option>`).join("");
+}
+
+function getFiltered() {
+    const f = document.getElementById("filterForm").value;
+    return getStudents().map((s, i) => ({ ...s, idx: i })).filter(s => !f || s.grade === f);
+}
+
+function renderStudents(page) {
+    if (page !== undefined) currentPage = page;
+    const filtered = getFiltered();
+    const { items, page: p, pages, total } = paginate(filtered, currentPage, PER_PAGE);
+    currentPage = p;
+    document.getElementById("studentsTable").innerHTML = items.map((s, i) => {
+        const next = NEXT_FORM[s.grade] || "-";
+        const statusClass = s.status === "Active" ? "badge-green" : s.status === "Graduated" ? "badge-blue" : "badge-yellow";
+        return `<tr>
+            <td>${(currentPage - 1) * PER_PAGE + i + 1}</td>
+            <td>${esc(s.name)}</td>
+            <td>${esc(s.grade)}</td>
+            <td><span class="badge ${statusClass}">${esc(s.status)}</span></td>
+            <td>${next !== "-" ? `<span class="badge badge-yellow">${next}</span>` : "-"}</td>
+            <td>${next !== "-" ? `<button class="btn btn-blue" onclick="promoteIndex(${s.idx}, '${next}')">Promote</button>` : "-"}</td>
+        </tr>`;
+    }).join("") || `<tr><td colspan="6" style="text-align:center;color:#9ca3af;">No students found</td></tr>`;
+    renderPagination("studentsPagination", currentPage, pages, total, PER_PAGE, "renderStudents");
+}
+
+function promoteIndex(idx, toForm) {
+    const students = getStudents();
+    if (!students[idx]) return;
+    const from = students[idx].grade;
+    students[idx].grade  = toForm;
+    students[idx].status = toForm === "Graduated" ? "Graduated" : "Active";
+    localStorage.setItem("students", JSON.stringify(students));
+    toast(`${students[idx].name} promoted from ${from} to ${toForm}`);
+    populateSingleDropdown();
+    renderStudents();
+}
+
+function bulkPromote() {
+    const from = document.getElementById("bulkFrom").value;
+    const to   = NEXT_FORM[from];
+    const students = getStudents();
+    let count = 0;
+    students.forEach(s => {
+        if (s.grade === from) {
+            s.grade  = to;
+            s.status = to === "Graduated" ? "Graduated" : "Active";
+            count++;
+        }
+    });
+    if (!count) return toast("No students in " + from, "error");
+    localStorage.setItem("students", JSON.stringify(students));
+    toast(`${count} student(s) promoted from ${from} to ${to}`);
+    populateSingleDropdown();
+    renderStudents();
+}
+
+function promoteOne() {
+    const idx    = Number(document.getElementById("singleStudent").value);
+    const toForm = document.getElementById("singleTo").value;
+    promoteIndex(idx, toForm);
+}
+
+function doExport() {
+    const students = getFiltered();
+    exportCSV(["Name", "Form", "Status"], students.map(s => [s.name, s.grade, s.status]), "students_promotion.csv");
+}
+
+populateSingleDropdown();
+renderStudents();
+</script>
+</body>
+</html>

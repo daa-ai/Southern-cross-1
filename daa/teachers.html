@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teachers — Admin</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1>Teachers</h1>
+
+        <div class="form-panel">
+            <h3>Add Teacher</h3>
+            <div class="form-row">
+                <input id="tName"    type="text"  placeholder="Full Name">
+                <input id="tSubject" type="text"  placeholder="Subject">
+                <input id="tEmail"   type="email" placeholder="Email">
+                <button class="btn btn-blue" onclick="addTeacher()">Add</button>
+            </div>
+        </div>
+
+        <div class="topbar">
+            <h2 style="margin:0;">All Teachers</h2>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <div class="search-box">
+                    <i class="fa-solid fa-search" style="color:#9ca3af;"></i>
+                    <input id="searchInput" type="text" placeholder="Search..." oninput="render(1)">
+                </div>
+                <button class="btn btn-blue no-print" onclick="doExport()"><i class="fa-solid fa-download"></i> CSV</button>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>#</th><th>Name</th><th>Subject</th><th>Email</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody id="teachersTable"></tbody>
+            </table>
+            <div class="pagination" id="teachersPagination"></div>
+        </div>
+    </div>
+</div>
+<script>
+initPage("admin", "teachers.html");
+
+let currentPage = 1;
+const PER_PAGE = 15;
+
+function getTeachersData() { return JSON.parse(localStorage.getItem("teachersList")) || getTeachers(); }
+function save(t) { localStorage.setItem("teachersList", JSON.stringify(t)); }
+
+function getFiltered() {
+    const q = document.getElementById("searchInput").value.toLowerCase();
+    return getTeachersData()
+        .map((t, i) => ({ ...t, _i: i }))
+        .filter(t => t.name.toLowerCase().includes(q) || t.subject.toLowerCase().includes(q) || t.email.toLowerCase().includes(q));
+}
+
+function render(page) {
+    if (page !== undefined) currentPage = page;
+    const filtered = getFiltered();
+    const { items, page: p, pages, total } = paginate(filtered, currentPage, PER_PAGE);
+    currentPage = p;
+    document.getElementById("teachersTable").innerHTML = items.map((t, i) =>
+        `<tr>
+            <td>${(currentPage - 1) * PER_PAGE + i + 1}</td>
+            <td>${esc(t.name)}</td>
+            <td>${esc(t.subject)}</td>
+            <td>${esc(t.email)}</td>
+            <td><span class="badge ${t.status === 'Active' ? 'badge-green' : 'badge-red'}">${esc(t.status)}</span></td>
+            <td>
+                <button class="btn btn-yellow" onclick="toggleStatus(${t._i})">Toggle</button>
+                <button class="btn btn-red" onclick="deleteTeacher(${t._i})" style="margin-left:4px;">Delete</button>
+            </td>
+        </tr>`
+    ).join("") || `<tr><td colspan="6" style="text-align:center;color:#9ca3af;">No teachers found</td></tr>`;
+    renderPagination("teachersPagination", currentPage, pages, total, PER_PAGE, "render");
+}
+
+function addTeacher() {
+    const name    = document.getElementById("tName").value.trim();
+    const subject = document.getElementById("tSubject").value.trim();
+    const email   = document.getElementById("tEmail").value.trim();
+    if (!name || !subject || !email) return toast("Fill all fields", "error");
+    const teachers = getTeachersData();
+    teachers.push({ name, subject, email, status: "Active" });
+    save(teachers);
+    document.getElementById("tName").value    = "";
+    document.getElementById("tSubject").value = "";
+    document.getElementById("tEmail").value   = "";
+    toast("Teacher added!");
+    render(1);
+}
+
+function deleteTeacher(i) {
+    if (!confirm("Delete this teacher?")) return;
+    const teachers = getTeachersData();
+    teachers.splice(i, 1);
+    save(teachers);
+    toast("Teacher deleted", "info");
+    render(1);
+}
+
+function toggleStatus(i) {
+    const teachers = getTeachersData();
+    teachers[i].status = teachers[i].status === "Active" ? "Inactive" : "Active";
+    save(teachers);
+    render();
+}
+
+function doExport() {
+    exportCSV(["Name","Subject","Email","Status"], getFiltered().map(t => [t.name, t.subject, t.email, t.status]), "teachers.csv");
+}
+
+render();
+</script>
+</body>
+</html>

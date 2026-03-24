@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Events Calendar</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1><i class="fa-solid fa-calendar-days"></i> Events Calendar</h1>
+
+        <div id="adminForm"></div>
+
+        <div class="form-panel" style="padding:16px 20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <button class="btn btn-blue" onclick="prevMonth()">&#8249;</button>
+                    <strong id="calTitle" style="font-size:16px;color:#A82810;min-width:140px;text-align:center;"></strong>
+                    <button class="btn btn-blue" onclick="nextMonth()">&#8250;</button>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <span style="font-size:12px;display:flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:#F67B50;border-radius:2px;display:inline-block;"></span> Event</span>
+                    <span style="font-size:12px;display:flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:#A82810;border-radius:2px;display:inline-block;"></span> Holiday</span>
+                    <span style="font-size:12px;display:flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:#FBAA60;border-radius:2px;display:inline-block;"></span> Exam</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-panel" style="padding:12px;">
+            <div class="cal-grid" id="calGrid"></div>
+        </div>
+
+        <h2>Upcoming Events</h2>
+        <div id="eventsList"></div>
+    </div>
+</div>
+
+<script>
+const pageUser = initPage(null, "events.html");
+let viewYear  = new Date().getFullYear();
+let viewMonth = new Date().getMonth();
+
+if (pageUser.role === "admin") {
+    document.getElementById("adminForm").innerHTML = `
+        <div class="form-panel">
+            <h3 id="evFormTitle">Add Event</h3>
+            <div class="form-row">
+                <input id="evTitle" type="text"  placeholder="Event Title">
+                <input id="evDate"  type="date">
+                <select id="evType">
+                    <option value="event">Event</option>
+                    <option value="holiday">Holiday</option>
+                    <option value="exam">Exam</option>
+                </select>
+                <input id="evDesc" type="text" placeholder="Description (optional)">
+                <button class="btn btn-blue" onclick="saveEvent()">Save</button>
+                <button class="btn" id="evCancelBtn" style="display:none;background:#9ca3af;" onclick="cancelEvEdit()">Cancel</button>
+            </div>
+        </div>`;
+}
+
+let editEvId = null;
+
+function saveEvent() {
+    const title = document.getElementById("evTitle").value.trim();
+    const date  = document.getElementById("evDate").value;
+    const type  = document.getElementById("evType").value;
+    const desc  = document.getElementById("evDesc").value.trim();
+    if (!title || !date) return toast("Title and date are required", "error");
+    const events = getEvents();
+    if (editEvId !== null) {
+        const idx = events.findIndex(e => e.id === editEvId);
+        if (idx !== -1) Object.assign(events[idx], { title, date, type, desc });
+        toast("Event updated");
+    } else {
+        const maxId = events.reduce((m, e) => Math.max(m, e.id), 0);
+        events.push({ id: maxId + 1, title, date, type, desc });
+        toast("Event added");
+    }
+    saveEvents(events);
+    cancelEvEdit();
+    renderCalendar();
+    renderList();
+}
+
+function editEvent(id) {
+    const e = getEvents().find(e => e.id === id);
+    if (!e) return;
+    editEvId = id;
+    document.getElementById("evTitle").value = e.title;
+    document.getElementById("evDate").value  = e.date;
+    document.getElementById("evType").value  = e.type;
+    document.getElementById("evDesc").value  = e.desc || "";
+    document.getElementById("evFormTitle").textContent = "Edit Event";
+    document.getElementById("evCancelBtn").style.display = "";
+}
+
+function deleteEvent(id) {
+    if (!confirm("Delete this event?")) return;
+    saveEvents(getEvents().filter(e => e.id !== id));
+    toast("Event deleted");
+    renderCalendar();
+    renderList();
+}
+
+function cancelEvEdit() {
+    editEvId = null;
+    if (document.getElementById("evTitle")) {
+        document.getElementById("evTitle").value = "";
+        document.getElementById("evDate").value  = "";
+        document.getElementById("evDesc").value  = "";
+        document.getElementById("evFormTitle").textContent = "Add Event";
+        document.getElementById("evCancelBtn").style.display = "none";
+    }
+}
+
+function renderCalendar() {
+    const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    document.getElementById("calTitle").textContent = months[viewMonth] + " " + viewYear;
+
+    const events  = getEvents();
+    const today   = new Date();
+    const first   = new Date(viewYear, viewMonth, 1);
+    const last    = new Date(viewYear, viewMonth + 1, 0);
+    const startDay = first.getDay();
+
+    const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    let html = days.map(d => `<div class="cal-day-header">${d}</div>`).join("");
+
+    for (let i = 0; i < startDay; i++) {
+        const d = new Date(viewYear, viewMonth, -startDay + i + 1);
+        html += `<div class="cal-cell other-month"><div class="cal-date">${d.getDate()}</div></div>`;
+    }
+
+    for (let d = 1; d <= last.getDate(); d++) {
+        const dateStr = viewYear + "-" + String(viewMonth + 1).padStart(2,"0") + "-" + String(d).padStart(2,"0");
+        const isToday = today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === d;
+        const dayEvents = events.filter(e => e.date === dateStr);
+        const evHTML = dayEvents.map(e => `<div class="cal-event ${e.type}" title="${esc(e.desc || e.title)}">${esc(e.title)}</div>`).join("");
+        html += `<div class="cal-cell ${isToday ? "today" : ""}"><div class="cal-date">${d}</div>${evHTML}</div>`;
+    }
+
+    const remaining = (7 - (startDay + last.getDate()) % 7) % 7;
+    for (let i = 1; i <= remaining; i++) {
+        html += `<div class="cal-cell other-month"><div class="cal-date">${i}</div></div>`;
+    }
+
+    document.getElementById("calGrid").innerHTML = html;
+}
+
+function renderList() {
+    const events = getEvents().sort((a, b) => a.date.localeCompare(b.date));
+    const upcoming = events.filter(e => e.date >= new Date().toISOString().slice(0,10));
+    const isAdmin = pageUser.role === "admin";
+    document.getElementById("eventsList").innerHTML = upcoming.length
+        ? upcoming.map(e => `
+            <div class="announcement-card" style="border-left-color:${e.type==="holiday"?"#A82810":e.type==="exam"?"#FBAA60":"#F67B50"}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+                    <div>
+                        <h3 style="margin:0 0 4px;">${esc(e.title)}</h3>
+                        <p style="margin:0 0 8px;">${esc(e.desc || "")}</p>
+                        <div class="announcement-meta">
+                            <span><i class="fa-solid fa-calendar"></i> ${e.date}</span>
+                            <span class="badge ${e.type==="holiday"?"badge-red":e.type==="exam"?"badge-yellow":"badge-blue"}">${e.type}</span>
+                        </div>
+                    </div>
+                    ${isAdmin ? `<div style="display:flex;gap:6px;">
+                        <button class="btn btn-yellow" onclick="editEvent(${e.id})">Edit</button>
+                        <button class="btn btn-red" onclick="deleteEvent(${e.id})">Delete</button>
+                    </div>` : ""}
+                </div>
+            </div>`)
+            .join("")
+        : `<p style="color:#9ca3af;">No upcoming events.</p>`;
+}
+
+function prevMonth() { viewMonth--; if (viewMonth < 0) { viewMonth = 11; viewYear--; } renderCalendar(); }
+function nextMonth() { viewMonth++; if (viewMonth > 11) { viewMonth = 0; viewYear++; } renderCalendar(); }
+
+renderCalendar();
+renderList();
+</script>
+</body>
+</html>

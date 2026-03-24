@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teacher Panel</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar">
+            <h1 style="margin:0;">Welcome, <span id="welcomeUser"></span></h1>
+        </div>
+
+        <div class="cards" id="statCards"></div>
+
+        <canvas id="attendanceChart" style="margin-bottom:30px;max-height:300px;"></canvas>
+
+        <div class="topbar">
+            <h2 style="margin:0;">Student Attendance</h2>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Name</th><th>Grade</th><th>Attendance %</th><th>Status</th></tr></thead>
+                <tbody id="attTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+checkAuth("teacher");
+const user = JSON.parse(localStorage.getItem("currentUser"));
+document.getElementById("welcomeUser").textContent = user.name;
+initPage("teacher", "teacher.html");
+
+const students = getStudents();
+const today = new Date().toISOString().split("T")[0];
+const todayAtt = JSON.parse(localStorage.getItem("t_attendance_" + today)) || {};
+const presentToday = Object.values(todayAtt).filter(v => v === "Present").length;
+
+document.getElementById("statCards").innerHTML = `
+    <div class="card-box"><i class="fa-solid fa-user-graduate"></i><h3>My Students</h3><p>${students.length}</p></div>
+    <div class="card-box"><i class="fa-solid fa-calendar-check"></i><h3>Present Today</h3><p>${presentToday}</p></div>
+    <div class="card-box"><i class="fa-solid fa-book"></i><h3>Subjects</h3><p>3</p></div>`;
+
+// Weekly attendance chart
+const days = ["Mon","Tue","Wed","Thu","Fri"];
+const weekData = days.map((_, di) => {
+    const d = new Date(); d.setDate(d.getDate() - (4 - di));
+    const key = "t_attendance_" + d.toISOString().split("T")[0];
+    const att = JSON.parse(localStorage.getItem(key)) || {};
+    return Object.values(att).filter(v => v === "Present").length;
+});
+
+new Chart(document.getElementById("attendanceChart"), {
+    type: "line",
+    data: {
+        labels: days,
+        datasets: [{ label: "Present This Week", data: weekData, borderColor: "#F67B50", backgroundColor: "rgba(246,123,80,0.1)", fill: true, tension: 0.3 }]
+    }
+});
+
+document.getElementById("attTable").innerHTML = students.map((s, i) => {
+    const stats = getAttendanceStats(i);
+    const status = stats.pct >= 75 ? "Active" : "At Risk";
+    return `<tr>
+        <td>${esc(s.name)}</td>
+        <td>${esc(s.grade)}</td>
+        <td>${stats.total > 0 ? stats.pct + "%" : "—"}</td>
+        <td><span class="badge ${status==='Active'?'badge-green':'badge-red'}">${status}</span></td>
+    </tr>`;
+}).join("");
+</script>
+</body>
+</html>
+

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Analytics — Admin</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1>Analytics</h1>
+
+        <!-- Stat cards -->
+        <div class="cards" id="analyticsStats"></div>
+
+        <!-- Charts row -->
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:30px;">
+            <div style="flex:1;min-width:280px;background:white;border-radius:10px;padding:20px;box-shadow:0 2px 10px rgba(168,40,16,0.08);">
+                <h3 style="margin-top:0;color:#A82810;">Pass / Fail Rate</h3>
+                <canvas id="passFailChart" style="max-height:220px;"></canvas>
+            </div>
+            <div style="flex:1;min-width:280px;background:white;border-radius:10px;padding:20px;box-shadow:0 2px 10px rgba(168,40,16,0.08);">
+                <h3 style="margin-top:0;color:#A82810;">Avg Score by Subject</h3>
+                <canvas id="subjectChart" style="max-height:220px;"></canvas>
+            </div>
+        </div>
+
+        <!-- Term trend -->
+        <div style="background:white;border-radius:10px;padding:20px;box-shadow:0 2px 10px rgba(168,40,16,0.08);margin-bottom:30px;">
+            <h3 style="margin-top:0;color:#A82810;">Class Average — Term Trend</h3>
+            <canvas id="trendChart" style="max-height:240px;"></canvas>
+        </div>
+
+        <!-- Top & Bottom performers -->
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:30px;">
+            <div style="flex:1;min-width:260px;">
+                <h2>🏆 Top Performers</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Rank</th><th>Name</th><th>Avg Score</th><th>Grade</th></tr></thead>
+                        <tbody id="topTable"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div style="flex:1;min-width:260px;">
+                <h2>⚠️ Needs Attention</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Rank</th><th>Name</th><th>Avg Score</th><th>Attendance</th></tr></thead>
+                        <tbody id="bottomTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attendance heatmap -->
+        <div style="background:white;border-radius:10px;padding:20px;box-shadow:0 2px 10px rgba(168,40,16,0.08);margin-bottom:30px;">
+            <h3 style="margin-top:0;color:#A82810;">Attendance Heatmap — Last 28 Days</h3>
+            <div style="display:flex;gap:6px;margin-bottom:8px;font-size:12px;color:#9ca3af;">
+                <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+            </div>
+            <div class="heatmap-grid" id="heatmap" style="grid-template-columns:repeat(7,32px);"></div>
+            <div style="display:flex;gap:8px;margin-top:12px;align-items:center;font-size:12px;color:#9ca3af;">
+                <span>Less</span>
+                <span class="heatmap-cell h0" style="width:16px;height:16px;display:inline-block;"></span>
+                <span class="heatmap-cell h1" style="width:16px;height:16px;display:inline-block;"></span>
+                <span class="heatmap-cell h2" style="width:16px;height:16px;display:inline-block;"></span>
+                <span class="heatmap-cell h3" style="width:16px;height:16px;display:inline-block;"></span>
+                <span class="heatmap-cell h4" style="width:16px;height:16px;display:inline-block;"></span>
+                <span>More</span>
+            </div>
+        </div>
+
+        <!-- Fee collection -->
+        <div style="background:white;border-radius:10px;padding:20px;box-shadow:0 2px 10px rgba(168,40,16,0.08);">
+            <h3 style="margin-top:0;color:#A82810;">Fee Collection Overview</h3>
+            <canvas id="feeChart" style="max-height:240px;"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+initPage("admin", "analytics.html");
+
+const students = getStudents();
+const EXAM_SUBJECTS = ["Mathematics", "English", "Science", "History", "Geography", "Kiswahili"];
+const TERMS = ["Term 1", "Term 2", "Term 3"];
+
+// ── Per-student avg scores ──────────────────────────────────────
+function getStudentAvg(si, term) {
+    const data = JSON.parse(localStorage.getItem("examResults_" + term)) || {};
+    const scores = EXAM_SUBJECTS.map(sub => data[si] && data[si][sub] !== undefined ? Number(data[si][sub]) : null).filter(s => s !== null);
+    return scores.length ? Math.round(scores.reduce((a,b) => a+b,0) / scores.length) : null;
+}
+
+// Use Term 1 for rankings
+const studentStats = students.map((s, i) => ({
+    name: s.name,
+    avg: getStudentAvg(i, "Term 1"),
+    att: getAttendanceStats(i)
+})).filter(s => s.avg !== null).sort((a,b) => b.avg - a.avg);
+
+// ── Stat cards ──────────────────────────────────────────────────
+const allUsers = JSON.parse(localStorage.getItem("users")) || [];
+const fees = getFees();
+const totalFees = fees.reduce((a,f) => a + f.amount, 0);
+const collectedFees = fees.reduce((a,f) => a + f.paid, 0);
+const feeRate = totalFees > 0 ? Math.round((collectedFees / totalFees) * 100) : 0;
+const passed = studentStats.filter(s => s.avg >= 50).length;
+
+document.getElementById("analyticsStats").innerHTML = `
+    <div class="card-box"><i class="fa-solid fa-users"></i><h3>Total Users</h3><p>${allUsers.length}</p></div>
+    <div class="card-box"><i class="fa-solid fa-circle-check" style="color:#16a34a;"></i><h3>Pass Rate</h3><p style="color:#16a34a;">${studentStats.length ? Math.round((passed/studentStats.length)*100) : 0}%</p></div>
+    <div class="card-box"><i class="fa-solid fa-money-bill"></i><h3>Fee Collection</h3><p>${feeRate}%</p></div>
+    <div class="card-box"><i class="fa-solid fa-chart-line"></i><h3>Class Avg</h3><p>${studentStats.length ? Math.round(studentStats.reduce((a,s)=>a+s.avg,0)/studentStats.length) : "—"}</p></div>`;
+
+// ── Pass/Fail chart ─────────────────────────────────────────────
+new Chart(document.getElementById("passFailChart"), {
+    type: "doughnut",
+    data: {
+        labels: ["Pass", "Fail", "No Data"],
+        datasets: [{ data: [passed, studentStats.filter(s=>s.avg<50).length, students.length - studentStats.length], backgroundColor: ["#16a34a","#A82810","#FBC490"] }]
+    },
+    options: { plugins: { legend: { position: "bottom" } } }
+});
+
+// ── Subject avg chart ───────────────────────────────────────────
+const subjectAvgs = EXAM_SUBJECTS.map(sub => {
+    const data = JSON.parse(localStorage.getItem("examResults_Term 1")) || {};
+    const scores = students.map((_,i) => data[i] && data[i][sub] !== undefined ? Number(data[i][sub]) : null).filter(s => s !== null);
+    return scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
+});
+
+new Chart(document.getElementById("subjectChart"), {
+    type: "bar",
+    data: {
+        labels: EXAM_SUBJECTS.map(s => s.substring(0,4)),
+        datasets: [{ label: "Avg Score", data: subjectAvgs, backgroundColor: "#F67B50" }]
+    },
+    options: { plugins: { legend: { display: false } }, scales: { y: { max: 100 } } }
+});
+
+// ── Term trend chart ────────────────────────────────────────────
+const termAvgs = TERMS.map(term => {
+    const data = JSON.parse(localStorage.getItem("examResults_" + term)) || {};
+    const avgs = students.map((_,i) => {
+        const scores = EXAM_SUBJECTS.map(sub => data[i] && data[i][sub] !== undefined ? Number(data[i][sub]) : null).filter(s=>s!==null);
+        return scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : null;
+    }).filter(a=>a!==null);
+    return avgs.length ? Math.round(avgs.reduce((a,b)=>a+b,0)/avgs.length) : 0;
+});
+
+new Chart(document.getElementById("trendChart"), {
+    type: "line",
+    data: {
+        labels: TERMS,
+        datasets: [{ label: "Class Average", data: termAvgs, borderColor: "#F67B50", backgroundColor: "rgba(246,123,80,0.1)", fill: true, tension: 0.4 }]
+    },
+    options: { scales: { y: { max: 100, min: 0 } } }
+});
+
+// ── Top performers ──────────────────────────────────────────────
+document.getElementById("topTable").innerHTML = studentStats.slice(0,5).map((s,i) =>
+    `<tr><td>${i+1}</td><td>${esc(s.name)}</td><td><strong>${s.avg}</strong></td><td>${letterGrade(s.avg)}</td></tr>`
+).join("") || `<tr><td colspan="4" style="text-align:center;color:#9ca3af;">No exam data yet</td></tr>`;
+
+// ── Bottom / at-risk ────────────────────────────────────────────
+const atRisk = students.map((s,i) => ({
+    name: s.name,
+    avg: getStudentAvg(i, "Term 1"),
+    att: getAttendanceStats(i)
+})).filter(s => (s.avg !== null && s.avg < 60) || s.att.pct < 75).sort((a,b) => (a.avg||100) - (b.avg||100));
+
+document.getElementById("bottomTable").innerHTML = atRisk.slice(0,5).map((s,i) =>
+    `<tr><td>${i+1}</td><td>${esc(s.name)}</td><td style="color:#A82810;">${s.avg !== null ? s.avg : "—"}</td><td>${s.att.total > 0 ? s.att.pct+"%" : "—"}</td></tr>`
+).join("") || `<tr><td colspan="4" style="text-align:center;color:#9ca3af;">No at-risk students</td></tr>`;
+
+// ── Attendance heatmap ──────────────────────────────────────────
+const heatmap = document.getElementById("heatmap");
+for (let d = 27; d >= 0; d--) {
+    const date = new Date();
+    date.setDate(date.getDate() - d);
+    const key = "t_attendance_" + date.toISOString().split("T")[0];
+    const att = JSON.parse(localStorage.getItem(key)) || {};
+    const presentCount = Object.values(att).filter(v => v === "Present").length;
+    const total = students.length;
+    const pct = total > 0 ? presentCount / total : 0;
+    const level = pct === 0 ? "h0" : pct < 0.4 ? "h1" : pct < 0.6 ? "h2" : pct < 0.8 ? "h3" : "h4";
+    const cell = document.createElement("div");
+    cell.className = "heatmap-cell " + level;
+    cell.title = date.toDateString() + ": " + presentCount + "/" + total + " present";
+    heatmap.appendChild(cell);
+}
+
+// ── Fee chart ───────────────────────────────────────────────────
+const feeByTerm = TERMS.map(term => {
+    const f = getFees().filter(x => x.term === term);
+    return { total: f.reduce((a,x)=>a+x.amount,0), paid: f.reduce((a,x)=>a+x.paid,0) };
+});
+
+new Chart(document.getElementById("feeChart"), {
+    type: "bar",
+    data: {
+        labels: TERMS,
+        datasets: [
+            { label: "Total", data: feeByTerm.map(f=>f.total), backgroundColor: "#FBC490" },
+            { label: "Collected", data: feeByTerm.map(f=>f.paid), backgroundColor: "#F67B50" }
+        ]
+    },
+    options: { plugins: { legend: { position: "bottom" } } }
+});
+</script>
+</body>
+</html>

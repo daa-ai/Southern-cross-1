@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Exam Results</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar">
+            <h1 style="margin:0;">Exam Results</h1>
+            <select id="termSelect" style="width:auto;" onchange="render()">
+                <option value="Term 1">Term 1</option>
+                <option value="Term 2">Term 2</option>
+                <option value="Term 3">Term 3</option>
+            </select>
+        </div>
+
+        <div class="cards" id="resultStats"></div>
+
+        <canvas id="resultsChart" style="max-height:280px;margin-bottom:30px;"></canvas>
+
+        <div class="topbar">
+            <h2 style="margin:0;">Results Table</h2>
+            <div class="search-box">
+                <i class="fa-solid fa-search" style="color:#9ca3af;"></i>
+                <input id="searchInput" type="text" placeholder="Search student..." oninput="render()">
+            </div>
+        </div>
+
+        <div class="table-wrap" id="resultsTable"></div>
+
+        <div id="entrySection"></div>
+    </div>
+</div>
+
+<script>
+const me = initPage(null, "exam-results.html");
+const students = getStudents();
+const EXAM_SUBJECTS = ["Mathematics", "English", "Science", "History", "Geography", "Kiswahili"];
+
+function getTermResults(term) {
+    return JSON.parse(localStorage.getItem("examResults_" + term)) || {};
+}
+
+function saveTermResults(term, data) {
+    localStorage.setItem("examResults_" + term, JSON.stringify(data));
+}
+
+function render() {
+    const term = document.getElementById("termSelect").value;
+    const q    = document.getElementById("searchInput").value.toLowerCase();
+    const data = getTermResults(term);
+
+    // Build rows with totals and ranks
+    const rows = students.map((s, i) => {
+        const scores = EXAM_SUBJECTS.map(sub => {
+            const v = data[i] && data[i][sub] !== undefined ? Number(data[i][sub]) : null;
+            return v;
+        });
+        const valid = scores.filter(s => s !== null);
+        const total = valid.reduce((a,b) => a+b, 0);
+        const avg   = valid.length ? Math.round(total / valid.length) : null;
+        const gpa   = avg !== null ? calcGPA([avg]) : null;
+        const pass  = avg !== null ? avg >= 50 : null;
+        return { s, i, scores, avg, gpa, pass };
+    });
+
+    // Rank by avg
+    const ranked = [...rows].filter(r => r.avg !== null).sort((a,b) => b.avg - a.avg);
+    rows.forEach(r => { r.rank = ranked.findIndex(x => x.i === r.i) + 1 || "—"; });
+
+    const filtered = rows.filter(r => r.s.name.toLowerCase().includes(q));
+
+    // Stats
+    const withScores = rows.filter(r => r.avg !== null);
+    const passed = withScores.filter(r => r.pass).length;
+    const classAvg = withScores.length ? Math.round(withScores.reduce((a,r) => a + r.avg, 0) / withScores.length) : 0;
+
+    document.getElementById("resultStats").innerHTML = `
+        <div class="card-box"><i class="fa-solid fa-users"></i><h3>Students</h3><p>${students.length}</p></div>
+        <div class="card-box"><i class="fa-solid fa-circle-check" style="color:#16a34a;"></i><h3>Passed</h3><p style="color:#16a34a;">${passed}</p></div>
+        <div class="card-box"><i class="fa-solid fa-circle-xmark" style="color:#A82810;"></i><h3>Failed</h3><p style="color:#A82810;">${withScores.length - passed}</p></div>
+        <div class="card-box"><i class="fa-solid fa-chart-line"></i><h3>Class Avg</h3><p>${classAvg || "—"}</p></div>`;
+
+    // Table
+    document.getElementById("resultsTable").innerHTML = `<table>
+        <thead><tr><th>Rank</th><th>Name</th>${EXAM_SUBJECTS.map(s=>`<th>${s.substring(0,4)}</th>`).join("")}<th>Avg</th><th>GPA</th><th>Result</th></tr></thead>
+        <tbody>${filtered.map(r => `<tr>
+            <td>${r.rank}</td>
+            <td>${esc(r.s.name)}</td>
+            ${r.scores.map(sc => `<td>${sc !== null ? sc : "—"}</td>`).join("")}
+            <td><strong>${r.avg !== null ? r.avg : "—"}</strong></td>
+            <td>${r.gpa || "—"}</td>
+            <td>${r.pass === null ? "—" : `<span class="badge ${r.pass?'badge-green':'badge-red'}">${r.pass?'Pass':'Fail'}</span>`}</td>
+        </tr>`).join("")}</tbody>
+    </table>`;
+
+    // Chart
+    if (window.rChart) window.rChart.destroy();
+    window.rChart = new Chart(document.getElementById("resultsChart"), {
+        type: "bar",
+        data: {
+            labels: students.map(s => s.name.split(" ")[0]),
+            datasets: [{ label: "Average Score", data: rows.map(r => r.avg || 0), backgroundColor: rows.map(r => r.pass ? "#F67B50" : "#A82810") }]
+        },
+        options: { plugins: { legend: { display: false } }, scales: { y: { max: 100 } } }
+    });
+
+    // Entry form for admin/teacher
+    if (me.role === "admin" || me.role === "teacher") {
+        document.getElementById("entrySection").innerHTML = `
+            <h2 style="margin-top:30px;">Enter Scores</h2>
+            <div class="table-wrap"><table>
+                <thead><tr><th>Student</th>${EXAM_SUBJECTS.map(s=>`<th>${s}</th>`).join("")}<th></th></tr></thead>
+                <tbody>${students.map((s,i) => `<tr>
+                    <td>${esc(s.name)}</td>
+                    ${EXAM_SUBJECTS.map(sub => {
+                        const v = data[i] && data[i][sub] !== undefined ? data[i][sub] : "";
+                        return `<td><input type="number" min="0" max="100" value="${v}" id="er_${i}_${sub.replace(/\s/g,'_')}" style="width:60px;padding:4px;margin:0;"></td>`;
+                    }).join("")}
+                    <td></td>
+                </tr>`).join("")}</tbody>
+            </table></div>
+            <button onclick="saveResults()" style="margin-top:12px;width:auto;padding:10px 24px;">Save Results</button>`;
+    }
+}
+
+function saveResults() {
+    const term = document.getElementById("termSelect").value;
+    const data = {};
+    students.forEach((_, i) => {
+        data[i] = {};
+        EXAM_SUBJECTS.forEach(sub => {
+            const el = document.getElementById(`er_${i}_${sub.replace(/\s/g,'_')}`);
+            if (el && el.value !== "") data[i][sub] = Number(el.value);
+        });
+    });
+    saveTermResults(term, data);
+    toast("Results saved for " + term);
+    render();
+}
+
+render();
+</script>
+</body>
+</html>

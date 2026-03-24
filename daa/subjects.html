@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Subjects</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1><i class="fa-solid fa-book"></i> Subjects</h1>
+
+        <div class="form-panel">
+            <h3 id="formTitle">Add Subject</h3>
+            <div class="form-row">
+                <input id="subName"    type="text" placeholder="Subject Name">
+                <input id="subCode"    type="text" placeholder="Code (e.g. MATH)">
+                <input id="subTeacher" type="text" placeholder="Assigned Teacher">
+                <button class="btn btn-blue" onclick="saveSubject()">Save</button>
+                <button class="btn" id="cancelBtn" style="display:none;background:#9ca3af;" onclick="cancelEdit()">Cancel</button>
+            </div>
+        </div>
+
+        <div class="topbar">
+            <h2 style="margin:0;">All Subjects</h2>
+            <button class="btn btn-blue no-print" onclick="doExport()"><i class="fa-solid fa-download"></i> Export CSV</button>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>#</th><th>Name</th><th>Code</th><th>Teacher</th><th>Actions</th></tr></thead>
+                <tbody id="subjectsTable"></tbody>
+            </table>
+            <div class="pagination" id="subjectsPagination"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+initPage("admin", "subjects.html");
+
+let editId = null;
+let currentPage = 1;
+const PER_PAGE = 10;
+
+function renderSubjects(page) {
+    if (page !== undefined) currentPage = page;
+    const subs = getSubjects();
+    const { items, page: p, pages, total } = paginate(subs, currentPage, PER_PAGE);
+    currentPage = p;
+    document.getElementById("subjectsTable").innerHTML = items.map((s, i) =>
+        `<tr>
+            <td>${(currentPage - 1) * PER_PAGE + i + 1}</td>
+            <td>${esc(s.name)}</td>
+            <td><span class="badge badge-blue">${esc(s.code)}</span></td>
+            <td>${esc(s.teacher || "-")}</td>
+            <td>
+                <button class="btn btn-yellow" onclick="editSubject(${s.id})">Edit</button>
+                <button class="btn btn-red" onclick="deleteSubject(${s.id})" style="margin-left:4px;">Delete</button>
+            </td>
+        </tr>`
+    ).join("") || `<tr><td colspan="5" style="text-align:center;color:#9ca3af;">No subjects yet</td></tr>`;
+    renderPagination("subjectsPagination", currentPage, pages, total, PER_PAGE, "renderSubjects");
+}
+
+function saveSubject() {
+    const name    = document.getElementById("subName").value.trim();
+    const code    = document.getElementById("subCode").value.trim().toUpperCase();
+    const teacher = document.getElementById("subTeacher").value.trim();
+    if (!name || !code) return toast("Name and code are required", "error");
+    const subs = getSubjects();
+    if (editId !== null) {
+        const idx = subs.findIndex(s => s.id === editId);
+        if (idx !== -1) { subs[idx].name = name; subs[idx].code = code; subs[idx].teacher = teacher; }
+        toast("Subject updated");
+    } else {
+        const maxId = subs.reduce((m, s) => Math.max(m, s.id), 0);
+        subs.push({ id: maxId + 1, name, code, teacher });
+        toast("Subject added");
+    }
+    saveSubjects(subs);
+    cancelEdit();
+    renderSubjects();
+}
+
+function editSubject(id) {
+    const s = getSubjects().find(s => s.id === id);
+    if (!s) return;
+    editId = id;
+    document.getElementById("subName").value    = s.name;
+    document.getElementById("subCode").value    = s.code;
+    document.getElementById("subTeacher").value = s.teacher;
+    document.getElementById("formTitle").textContent = "Edit Subject";
+    document.getElementById("cancelBtn").style.display = "";
+}
+
+function deleteSubject(id) {
+    if (!confirm("Delete this subject?")) return;
+    saveSubjects(getSubjects().filter(s => s.id !== id));
+    toast("Subject deleted");
+    renderSubjects();
+}
+
+function cancelEdit() {
+    editId = null;
+    document.getElementById("subName").value    = "";
+    document.getElementById("subCode").value    = "";
+    document.getElementById("subTeacher").value = "";
+    document.getElementById("formTitle").textContent = "Add Subject";
+    document.getElementById("cancelBtn").style.display = "none";
+}
+
+function doExport() {
+    exportCSV(["Name", "Code", "Teacher"], getSubjects().map(s => [s.name, s.code, s.teacher]), "subjects.csv");
+}
+
+renderSubjects();
+</script>
+</body>
+</html>

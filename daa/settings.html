@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Settings — Admin</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1>Settings</h1>
+
+        <div class="form-panel" style="max-width:500px;">
+            <h3>School Information</h3>
+            <label>School Name</label>
+            <input id="schoolName" type="text" placeholder="Enter school name">
+            <label>School Email</label>
+            <input id="schoolEmail" type="email" placeholder="Enter school email">
+            <label>School Phone</label>
+            <input id="schoolPhone" type="text" placeholder="Enter phone number">
+            <button onclick="saveSettings()" style="margin-top:14px;">Save Settings</button>
+        </div>
+
+        <div class="form-panel" style="max-width:500px;margin-top:20px;">
+            <h3>Account</h3>
+            <p id="accountInfo" style="color:#6b7280;font-size:14px;"></p>
+            <a href="profile.html"><button type="button">Edit Profile</button></a>
+            <button onclick="logout()" style="background:#A82810;margin-top:8px;">🚪 Logout</button>
+        </div>
+    </div>
+</div>
+<script>
+checkAuth("admin");
+initPage("admin", "settings.html");
+const user = JSON.parse(localStorage.getItem("currentUser"));
+document.getElementById("accountInfo").textContent = `Logged in as: ${esc(user.name)} (${esc(user.email)})`;
+
+const settings = JSON.parse(localStorage.getItem("schoolSettings")) || {};
+document.getElementById("schoolName").value  = settings.name  || "";
+document.getElementById("schoolEmail").value = settings.email || "";
+document.getElementById("schoolPhone").value = settings.phone || "";
+
+function saveSettings() {
+    localStorage.setItem("schoolSettings", JSON.stringify({
+        name:  document.getElementById("schoolName").value,
+        email: document.getElementById("schoolEmail").value,
+        phone: document.getElementById("schoolPhone").value
+    }));
+    toast("Settings saved!");
+}
+</script>
+</body>
+</html>
+

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Attendance — Parent</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1>Attendance Record</h1>
+
+        <div class="cards" id="statCards" style="margin-bottom:24px;"></div>
+
+        <canvas id="attendanceChart" style="max-height:300px;margin-bottom:30px;"></canvas>
+
+        <div class="topbar"><h2 style="margin:0;">Attendance Log</h2></div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Date</th><th>Status</th></tr></thead>
+                <tbody id="logTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+const parentUser = initPage("parent", "parent-attendance.html");
+const CHILD_INDEX = getLinkedStudentIndex(parentUser.email);
+const stats = getAttendanceStats(CHILD_INDEX);
+
+document.getElementById("statCards").innerHTML = `
+    <div class="card-box"><i class="fa-solid fa-circle-check" style="color:#16a34a;"></i><h3>Present</h3><p style="color:#16a34a;">${stats.Present}</p></div>
+    <div class="card-box"><i class="fa-solid fa-circle-xmark" style="color:#dc2626;"></i><h3>Absent</h3><p style="color:#dc2626;">${stats.Absent}</p></div>
+    <div class="card-box"><i class="fa-solid fa-clock" style="color:#f59e0b;"></i><h3>Late</h3><p style="color:#f59e0b;">${stats.Late}</p></div>
+    <div class="card-box"><i class="fa-solid fa-percent"></i><h3>Rate</h3><p style="color:#F67B50;">${stats.total > 0 ? stats.pct + "%" : "—"}</p></div>`;
+
+// Build log from all attendance keys
+const log = [];
+Object.keys(localStorage).filter(k => k.startsWith("t_attendance_")).forEach(key => {
+    const date = key.replace("t_attendance_", "");
+    const day = JSON.parse(localStorage.getItem(key));
+    if (day[CHILD_INDEX]) log.push({ date, status: day[CHILD_INDEX] });
+});
+log.sort((a, b) => b.date.localeCompare(a.date));
+
+const colorMap = { Present: "#16a34a", Absent: "#dc2626", Late: "#f59e0b" };
+document.getElementById("logTable").innerHTML = log.length
+    ? log.map(l => `<tr><td>${esc(l.date)}</td><td><span class="badge" style="background:${colorMap[l.status]}20;color:${colorMap[l.status]}">${esc(l.status)}</span></td></tr>`).join("")
+    : `<tr><td colspan="2" style="text-align:center;color:#9ca3af;">No attendance records yet</td></tr>`;
+
+new Chart(document.getElementById("attendanceChart"), {
+    type: "doughnut",
+    data: {
+        labels: ["Present", "Absent", "Late"],
+        datasets: [{ data: [stats.Present, stats.Absent, stats.Late], backgroundColor: ["#16a34a", "#A82810", "#FBAA60"] }]
+    }
+});
+</script>
+</body>
+</html>
+

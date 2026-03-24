@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Attendance — Admin</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1>Attendance</h1>
+
+        <div class="topbar">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                <label style="margin:0;"><strong>Date:</strong></label>
+                <input id="dateInput" type="date" style="width:auto;" onchange="loadAttendance()">
+                <button onclick="saveAttendance()" style="width:auto;padding:10px 20px;">Save</button>
+            </div>
+        </div>
+
+        <div class="table-wrap" style="margin-bottom:30px;">
+            <table>
+                <thead><tr><th>#</th><th>Name</th><th>Grade</th><th>Status</th></tr></thead>
+                <tbody id="attendanceTable"></tbody>
+            </table>
+        </div>
+
+        <canvas id="summaryChart" style="max-height:300px;"></canvas>
+    </div>
+</div>
+<script>
+checkAuth("admin");
+initPage("admin", "attendance.html");
+
+const students = getStudents();
+const today = new Date().toISOString().split("T")[0];
+document.getElementById("dateInput").value = today;
+
+function loadAttendance() {
+    const date = document.getElementById("dateInput").value;
+    const saved = JSON.parse(localStorage.getItem("t_attendance_" + date)) || {};
+    document.getElementById("attendanceTable").innerHTML = students.map((s, i) => `
+        <tr>
+            <td>${i+1}</td><td>${esc(s.name)}</td><td>${esc(s.grade)}</td>
+            <td>
+                <select id="att_${i}" style="width:auto;">
+                    <option value="Present" ${saved[i]==='Present'?'selected':''}>Present</option>
+                    <option value="Absent"  ${saved[i]==='Absent' ?'selected':''}>Absent</option>
+                    <option value="Late"    ${saved[i]==='Late'   ?'selected':''}>Late</option>
+                </select>
+            </td>
+        </tr>`).join("");
+}
+
+function saveAttendance() {
+    const date = document.getElementById("dateInput").value;
+    const data = {};
+    students.forEach((_, i) => { data[i] = document.getElementById("att_" + i).value; });
+    localStorage.setItem("t_attendance_" + date, JSON.stringify(data));
+    toast("Attendance saved for " + date);
+    renderChart(data);
+}
+
+let chartInstance;
+function renderChart(data) {
+    const counts = { Present: 0, Absent: 0, Late: 0 };
+    Object.values(data).forEach(v => { if (counts[v] !== undefined) counts[v]++; });
+    if (chartInstance) chartInstance.destroy();
+    chartInstance = new Chart(document.getElementById("summaryChart"), {
+        type: "doughnut",
+        data: {
+            labels: ["Present", "Absent", "Late"],
+            datasets: [{ data: [counts.Present, counts.Absent, counts.Late], backgroundColor: ["#16a34a", "#A82810", "#FBAA60"] }]
+        }
+    });
+}
+
+loadAttendance();
+const existing = JSON.parse(localStorage.getItem("t_attendance_" + today));
+if (existing) renderChart(existing);
+</script>
+</body>
+</html>
+

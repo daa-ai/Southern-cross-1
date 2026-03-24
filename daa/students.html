@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Students — Admin</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1>Students</h1>
+
+        <div class="form-panel">
+            <h3>Add Student</h3>
+            <div class="form-row">
+                <input id="sName"   type="text" placeholder="Full Name">
+                <select id="sGrade">
+                    <option value="Form 1">Form 1</option>
+                    <option value="Form 2">Form 2</option>
+                    <option value="Form 3">Form 3</option>
+                    <option value="Form 4">Form 4</option>
+                </select>
+                <input id="sParent" type="text" placeholder="Parent Name">
+                <button class="btn btn-blue" onclick="addStudent()">Add</button>
+            </div>
+        </div>
+
+        <div class="topbar">
+            <h2 style="margin:0;">All Students</h2>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <select id="filterGrade" onchange="render(1)">
+                    <option value="">All Forms</option>
+                    <option value="Form 1">Form 1</option>
+                    <option value="Form 2">Form 2</option>
+                    <option value="Form 3">Form 3</option>
+                    <option value="Form 4">Form 4</option>
+                </select>
+                <div class="search-box">
+                    <i class="fa-solid fa-search" style="color:#9ca3af;"></i>
+                    <input id="searchInput" type="text" placeholder="Search..." oninput="render(1)">
+                </div>
+                <button class="btn btn-blue no-print" onclick="doExport()"><i class="fa-solid fa-download"></i> CSV</button>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>#</th><th>Name</th><th>Grade</th><th>Parent</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody id="studentsTable"></tbody>
+            </table>
+            <div class="pagination" id="studentsPagination"></div>
+        </div>
+    </div>
+</div>
+<script>
+initPage("admin", "students.html");
+
+let currentPage = 1;
+const PER_PAGE = 15;
+
+function getStudentsData() { return JSON.parse(localStorage.getItem("students")) || getStudents(); }
+function save(s) { localStorage.setItem("students", JSON.stringify(s)); }
+
+function getFiltered() {
+    const q = document.getElementById("searchInput").value.toLowerCase();
+    const f = document.getElementById("filterGrade").value;
+    return getStudentsData()
+        .map((s, i) => ({ ...s, _i: i }))
+        .filter(s => (!f || s.grade === f) && (s.name.toLowerCase().includes(q) || s.grade.toLowerCase().includes(q)));
+}
+
+function render(page) {
+    if (page !== undefined) currentPage = page;
+    const filtered = getFiltered();
+    const { items, page: p, pages, total } = paginate(filtered, currentPage, PER_PAGE);
+    currentPage = p;
+    document.getElementById("studentsTable").innerHTML = items.map((s, i) =>
+        `<tr>
+            <td>${(currentPage - 1) * PER_PAGE + i + 1}</td>
+            <td>${esc(s.name)}</td>
+            <td>${esc(s.grade)}</td>
+            <td>${esc(s.parent)}</td>
+            <td><span class="badge ${s.status === 'Active' ? 'badge-green' : 'badge-red'}">${esc(s.status)}</span></td>
+            <td>
+                <button class="btn btn-yellow" onclick="toggleStatus(${s._i})">Toggle</button>
+                <button class="btn btn-red" onclick="deleteStudent(${s._i})" style="margin-left:4px;">Delete</button>
+            </td>
+        </tr>`
+    ).join("") || `<tr><td colspan="6" style="text-align:center;color:#9ca3af;">No students found</td></tr>`;
+    renderPagination("studentsPagination", currentPage, pages, total, PER_PAGE, "render");
+}
+
+function addStudent() {
+    const name   = document.getElementById("sName").value.trim();
+    const grade  = document.getElementById("sGrade").value;
+    const parent = document.getElementById("sParent").value.trim();
+    if (!name || !parent) return toast("Fill all fields", "error");
+    const students = getStudentsData();
+    students.push({ name, grade, parent, status: "Active" });
+    save(students);
+    document.getElementById("sName").value   = "";
+    document.getElementById("sParent").value = "";
+    toast("Student added!");
+    render(1);
+}
+
+function deleteStudent(i) {
+    if (!confirm("Delete this student?")) return;
+    const students = getStudentsData();
+    students.splice(i, 1);
+    save(students);
+    toast("Student deleted", "info");
+    render(1);
+}
+
+function toggleStatus(i) {
+    const students = getStudentsData();
+    students[i].status = students[i].status === "Active" ? "Inactive" : "Active";
+    save(students);
+    render();
+}
+
+function doExport() {
+    exportCSV(["Name","Grade","Parent","Status"], getFiltered().map(s => [s.name, s.grade, s.parent, s.status]), "students.csv");
+}
+
+render();
+</script>
+</body>
+</html>

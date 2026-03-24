@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Messages</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main" style="padding:16px;display:flex;flex-direction:column;">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1 style="margin-bottom:12px;">Messages</h1>
+
+        <div class="chat-layout">
+            <!-- Contacts -->
+            <div class="chat-contacts">
+                <div class="chat-contacts-header">
+                    <h3><i class="fa-solid fa-message"></i> Chats</h3>
+                </div>
+                <div class="chat-search">
+                    <input id="contactSearch" type="text" placeholder="Search contacts..." oninput="renderContacts()">
+                </div>
+                <div class="contact-list" id="contactList"></div>
+            </div>
+
+            <!-- Chat window -->
+            <div class="chat-window" id="chatWindow">
+                <div class="chat-empty" id="chatEmpty">
+                    <i class="fa-solid fa-message"></i>
+                    <span>Select a contact to start chatting</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const me = initPage(null, "messages.html");
+let activeContact = null;
+let pollInterval = null;
+
+const allUsers = (JSON.parse(localStorage.getItem("users")) || []).filter(u => u.email !== me.email);
+
+function timeAgo(iso) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return m + "m ago";
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + "h ago";
+    return Math.floor(h / 24) + "d ago";
+}
+
+function formatTime(iso) {
+    const d = new Date(iso);
+    return d.getHours().toString().padStart(2,"0") + ":" + d.getMinutes().toString().padStart(2,"0");
+}
+
+function renderContacts() {
+    const q = document.getElementById("contactSearch").value.toLowerCase();
+    const filtered = allUsers.filter(u => u.name.toLowerCase().includes(q) || u.role.includes(q));
+
+    // Sort by last message time
+    filtered.sort((a, b) => {
+        const la = getLastMessage(me.email, a.email);
+        const lb = getLastMessage(me.email, b.email);
+        if (!la && !lb) return 0;
+        if (!la) return 1;
+        if (!lb) return -1;
+        return new Date(lb.time) - new Date(la.time);
+    });
+
+    document.getElementById("contactList").innerHTML = filtered.map(u => {
+        const last = getLastMessage(me.email, u.email);
+        const msgs = getMessages(me.email, u.email);
+        const unread = msgs.filter(m => m.from === u.email && !m.read).length;
+        const isActive = activeContact && activeContact.email === u.email;
+        return `<div class="contact-item ${isActive ? 'active' : ''}" onclick="openChat('${u.email}')">
+            <div class="contact-avatar">${u.name.charAt(0).toUpperCase()}</div>
+            <div class="contact-info">
+                <div class="contact-name">${esc(u.name)}</div>
+                <div class="contact-preview">${last ? esc(last.text.substring(0,40)) : '<em>No messages yet</em>'}</div>
+            </div>
+            <div class="contact-meta">
+                <span class="contact-time">${last ? timeAgo(last.time) : ''}</span>
+                ${unread > 0 ? `<span class="contact-unread">${unread}</span>` : ''}
+            </div>
+        </div>`;
+    }).join("") || `<div style="padding:20px;text-align:center;color:#9ca3af;">No contacts found</div>`;
+}
+
+function openChat(email) {
+    activeContact = allUsers.find(u => u.email === email);
+    if (!activeContact) return;
+    markMessagesRead(me.email, email);
+    renderContacts();
+    renderChatWindow();
+    if (pollInterval) clearInterval(pollInterval);
+    pollInterval = setInterval(() => {
+        markMessagesRead(me.email, email);
+        renderMessages();
+        renderContacts();
+    }, 1500);
+}
+
+function renderChatWindow() {
+    const u = activeContact;
+    document.getElementById("chatWindow").innerHTML = `
+        <div class="chat-header">
+            <div class="contact-avatar" style="width:38px;height:38px;font-size:15px;">${u.name.charAt(0).toUpperCase()}</div>
+            <div>
+                <div class="chat-header-name">${esc(u.name)}</div>
+                <div class="chat-header-role">${esc(u.role)}</div>
+            </div>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input-bar">
+            <input id="msgInput" type="text" placeholder="Type a message..." onkeydown="if(event.key==='Enter') sendMsg()">
+            <button onclick="sendMsg()"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>`;
+    renderMessages();
+}
+
+function renderMessages() {
+    if (!activeContact) return;
+    const msgs = getMessages(me.email, activeContact.email);
+    const container = document.getElementById("chatMessages");
+    if (!container) return;
+
+    if (!msgs.length) {
+        container.innerHTML = `<div style="text-align:center;color:#9ca3af;margin-top:40px;font-size:14px;">No messages yet. Say hello! 👋</div>`;
+        return;
+    }
+
+    let html = "";
+    let lastDate = "";
+    msgs.forEach(m => {
+        const d = new Date(m.time).toDateString();
+        if (d !== lastDate) {
+            html += `<div style="text-align:center;font-size:11px;color:#9ca3af;margin:8px 0;">${d}</div>`;
+            lastDate = d;
+        }
+        const mine = m.from === me.email;
+        html += `<div class="msg-row ${mine ? 'mine' : 'theirs'}">
+            <div class="msg-bubble">
+                ${esc(m.text)}
+                <div class="msg-time">${formatTime(m.time)}${mine ? (m.read ? ' ✓✓' : ' ✓') : ''}</div>
+            </div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+    container.scrollTop = container.scrollHeight;
+}
+
+function sendMsg() {
+    const input = document.getElementById("msgInput");
+    const text = input.value.trim();
+    if (!text || !activeContact) return;
+    sendMessage(me.email, activeContact.email, text);
+    input.value = "";
+    renderMessages();
+    renderContacts();
+}
+
+renderContacts();
+</script>
+</body>
+</html>

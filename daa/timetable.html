@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Timetable</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar">
+            <h1 style="margin:0;">Timetable</h1>
+            <div id="saveBtn"></div>
+        </div>
+
+        <div style="overflow-x:auto;">
+            <table class="timetable-grid" id="ttTable"></table>
+        </div>
+
+        <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;" id="legend"></div>
+    </div>
+</div>
+
+<script>
+const me = initPage(null, "timetable.html");
+const canEdit = me.role === "admin" || me.role === "teacher";
+
+if (canEdit) {
+    document.getElementById("saveBtn").innerHTML = `<button onclick="saveTT()" style="width:auto;padding:10px 24px;">Save Timetable</button>`;
+}
+
+const subjectColors = {
+    "Mathematics": "#F67B50", "English": "#FBAA60", "Science": "#A82810",
+    "History": "#FBC490", "Geography": "#e07b3a", "Kiswahili": "#c45a20",
+    "P.E.": "#16a34a", "Art": "#2563eb", "Music": "#7c3aed", "CRE": "#0891b2", "Free": "#9ca3af"
+};
+
+function buildTable() {
+    const tt = getTimetable();
+    let html = "<thead><tr><th>Period</th>";
+    DAYS.forEach(d => html += `<th>${d}</th>`);
+    html += "</tr></thead><tbody>";
+
+    PERIODS.forEach((period, pi) => {
+        html += `<tr><td class="period-label">${period}</td>`;
+        DAYS.forEach(day => {
+            const subject = (tt[day] && tt[day][pi]) || "Free";
+            const color = subjectColors[subject] || "#9ca3af";
+            if (canEdit) {
+                html += `<td>
+                    <select id="tt_${day}_${pi}" style="border-left:3px solid ${color};">
+                        ${SUBJECTS.map(s => `<option value="${s}" ${s === subject ? 'selected' : ''}>${s}</option>`).join("")}
+                    </select>
+                </td>`;
+            } else {
+                html += `<td style="border-left:3px solid ${color};font-weight:600;color:${color};">${subject}</td>`;
+            }
+        });
+        html += "</tr>";
+    });
+
+    html += "</tbody>";
+    document.getElementById("ttTable").innerHTML = html;
+
+    // Color dropdowns on change
+    if (canEdit) {
+        DAYS.forEach(day => {
+            PERIODS.forEach((_, pi) => {
+                const sel = document.getElementById(`tt_${day}_${pi}`);
+                sel.addEventListener("change", () => {
+                    sel.style.borderLeftColor = subjectColors[sel.value] || "#9ca3af";
+                });
+            });
+        });
+    }
+}
+
+function saveTT() {
+    const tt = {};
+    DAYS.forEach(day => {
+        tt[day] = PERIODS.map((_, pi) => document.getElementById(`tt_${day}_${pi}`).value);
+    });
+    saveTimetable(tt);
+    toast("Timetable saved!");
+}
+
+// Legend
+document.getElementById("legend").innerHTML = Object.entries(subjectColors).map(([s, c]) =>
+    `<span style="display:flex;align-items:center;gap:6px;font-size:12px;">
+        <span style="width:12px;height:12px;border-radius:3px;background:${c};display:inline-block;"></span>${s}
+    </span>`
+).join("");
+
+buildTable();
+</script>
+</body>
+</html>

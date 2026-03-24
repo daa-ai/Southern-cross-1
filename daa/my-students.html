@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Students — Teacher</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar">
+            <h1 style="margin:0;">My Students</h1>
+            <div class="search-box">
+                <i class="fa-solid fa-search" style="color:#9ca3af;"></i>
+                <input id="searchInput" type="text" placeholder="Search..." oninput="render()">
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>#</th><th>Name</th><th>Grade</th><th>Attendance %</th><th>Avg Score</th><th>Status</th></tr></thead>
+                <tbody id="studentsTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+checkAuth("teacher");
+initPage("teacher", "my-students.html");
+
+const students = getStudents();
+
+function render() {
+    const q = document.getElementById("searchInput").value.toLowerCase();
+    const list = students.map((s, i) => ({ ...s, i })).filter(s => s.name.toLowerCase().includes(q) || s.grade.toLowerCase().includes(q));
+    document.getElementById("studentsTable").innerHTML = list.map((s, idx) => {
+        const stats = getAttendanceStats(s.i);
+        const avg = getAvgScore(s.i);
+        const status = stats.pct >= 75 || stats.total === 0 ? "Active" : "At Risk";
+        return `<tr>
+            <td>${idx+1}</td>
+            <td>${esc(s.name)}</td>
+            <td>${esc(s.grade)}</td>
+            <td>${stats.total > 0 ? stats.pct + "%" : "—"}</td>
+            <td>${avg !== null ? avg : "—"}</td>
+            <td><span class="badge ${status==='Active'?'badge-green':'badge-red'}">${status}</span></td>
+        </tr>`;
+    }).join("") || `<tr><td colspan="6" style="text-align:center;color:#9ca3af;">No students found</td></tr>`;
+}
+
+render();
+</script>
+</body>
+</html>
+

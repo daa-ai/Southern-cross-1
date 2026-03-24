@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Grades — Teacher</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1>Grades</h1>
+
+        <div class="topbar">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                <label style="margin:0;"><strong>Subject:</strong></label>
+                <select id="subjectSelect" style="width:auto;" onchange="loadGrades()">
+                    <option value="Mathematics">Mathematics</option>
+                    <option value="English">English</option>
+                    <option value="Science">Science</option>
+                </select>
+                <button onclick="saveGrades()" style="width:auto;padding:10px 20px;">Save</button>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>#</th><th>Name</th><th>Grade</th><th>Score (0–100)</th><th>Letter</th></tr></thead>
+                <tbody id="gradesTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+checkAuth("teacher");
+initPage("teacher", "grades.html");
+
+const students = getStudents();
+
+function loadGrades() {
+    const subject = document.getElementById("subjectSelect").value;
+    const saved = JSON.parse(localStorage.getItem("grades_" + subject)) || {};
+    document.getElementById("gradesTable").innerHTML = students.map((s, i) => {
+        const score = saved[i] !== undefined ? saved[i] : "";
+        return `<tr>
+            <td>${i+1}</td><td>${esc(s.name)}</td><td>${esc(s.grade)}</td>
+            <td><input id="score_${i}" type="number" min="0" max="100" value="${esc(String(score))}" style="width:80px;" oninput="updateLetter(${i})"></td>
+            <td id="letter_${i}">${score !== "" ? letterGrade(Number(score)) : "—"}</td>
+        </tr>`;
+    }).join("");
+}
+
+function updateLetter(i) {
+    const val = document.getElementById("score_" + i).value;
+    document.getElementById("letter_" + i).textContent = val !== "" ? letterGrade(Number(val)) : "—";
+}
+
+function saveGrades() {
+    const subject = document.getElementById("subjectSelect").value;
+    const data = {};
+    students.forEach((_, i) => { data[i] = document.getElementById("score_" + i).value; });
+    localStorage.setItem("grades_" + subject, JSON.stringify(data));
+    toast("Grades saved for " + subject);
+}
+
+loadGrades();
+</script>
+</body>
+</html>
+

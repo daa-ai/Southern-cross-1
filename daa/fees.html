@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fees</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1>Fee Management</h1>
+
+        <div class="cards" id="feeStats"></div>
+
+        <div id="adminSection"></div>
+
+        <div class="topbar">
+            <h2 style="margin:0;">Fee Records</h2>
+            <select id="termFilter" style="width:auto;" onchange="render()">
+                <option value="Term 1">Term 1</option>
+                <option value="Term 2">Term 2</option>
+                <option value="Term 3">Term 3</option>
+            </select>
+        </div>
+
+        <div class="table-wrap" id="feeTable"></div>
+
+        <canvas id="feeChart" style="margin-top:30px;max-height:280px;"></canvas>
+    </div>
+</div>
+
+<script>
+const me = initPage(null, "fees.html");
+const students = getStudents();
+
+if (me.role === "admin") {
+    document.getElementById("adminSection").innerHTML = `
+        <div class="form-panel">
+            <h3>Record Payment</h3>
+            <div class="form-row">
+                <select id="fStudent" style="flex:1;">
+                    ${students.map((s,i) => `<option value="${i}">${esc(s.name)}</option>`).join("")}
+                </select>
+                <select id="fTerm" style="width:auto;">
+                    <option>Term 1</option><option>Term 2</option><option>Term 3</option>
+                </select>
+                <input id="fAmount" type="number" placeholder="Total Amount" style="flex:1;">
+                <input id="fPaid" type="number" placeholder="Amount Paid" style="flex:1;">
+                <input id="fDue" type="date" style="flex:1;">
+                <button class="btn" onclick="recordPayment()">Record</button>
+            </div>
+        </div>`;
+}
+
+function feeStatus(amount, paid) {
+    if (paid >= amount) return "Paid";
+    if (paid > 0) return "Partial";
+    return "Unpaid";
+}
+
+function render() {
+    const term = document.getElementById("termFilter").value;
+    let fees = getFees().filter(f => f.term === term);
+    if (me.role === "parent") fees = fees.filter(f => f.studentIndex === getLinkedStudentIndex(me.email));
+
+    const total   = fees.reduce((a,f) => a + f.amount, 0);
+    const paid    = fees.reduce((a,f) => a + f.paid, 0);
+    const balance = total - paid;
+
+    document.getElementById("feeStats").innerHTML = `
+        <div class="card-box"><i class="fa-solid fa-money-bill"></i><h3>Total Fees</h3><p>KSh ${total.toLocaleString()}</p></div>
+        <div class="card-box"><i class="fa-solid fa-circle-check" style="color:#16a34a;"></i><h3>Collected</h3><p style="color:#16a34a;">KSh ${paid.toLocaleString()}</p></div>
+        <div class="card-box"><i class="fa-solid fa-circle-xmark" style="color:#A82810;"></i><h3>Balance</h3><p style="color:#A82810;">KSh ${balance.toLocaleString()}</p></div>`;
+
+    document.getElementById("feeTable").innerHTML = `<table>
+        <thead><tr><th>#</th><th>Student</th><th>Term</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Due Date</th><th>Status</th>${me.role==="admin"?"<th>Action</th>":""}</tr></thead>
+        <tbody>${fees.map((f, i) => {
+            const s = students[f.studentIndex] || { name: "Unknown" };
+            const bal = f.amount - f.paid;
+            const st = feeStatus(f.amount, f.paid);
+            const pct = Math.round((f.paid / f.amount) * 100);
+            const ri = getFees().indexOf(f);
+            return `<tr>
+                <td>${i+1}</td>
+                <td>${esc(s.name)}</td>
+                <td>${esc(f.term)}</td>
+                <td>KSh ${f.amount.toLocaleString()}</td>
+                <td>
+                    KSh ${f.paid.toLocaleString()}
+                    <div class="fee-progress"><div class="fee-progress-bar" style="width:${pct}%"></div></div>
+                </td>
+                <td>KSh ${bal.toLocaleString()}</td>
+                <td>${esc(f.dueDate)}</td>
+                <td><span class="badge ${st==='Paid'?'badge-green':st==='Partial'?'badge-yellow':'badge-red'}">${st}</span></td>
+                ${me.role==="admin" ? `<td><button class="btn btn-red" onclick="deleteFee(${ri})">Delete</button></td>` : ""}
+            </tr>`;
+        }).join("")}</tbody>
+    </table>`;
+
+    // Chart
+    const counts = { Paid: 0, Partial: 0, Unpaid: 0 };
+    fees.forEach(f => counts[feeStatus(f.amount, f.paid)]++);
+    if (window.feeChartInst) window.feeChartInst.destroy();
+    window.feeChartInst = new Chart(document.getElementById("feeChart"), {
+        type: "doughnut",
+        data: {
+            labels: ["Paid", "Partial", "Unpaid"],
+            datasets: [{ data: [counts.Paid, counts.Partial, counts.Unpaid], backgroundColor: ["#16a34a", "#FBAA60", "#A82810"] }]
+        },
+        options: { plugins: { legend: { position: "bottom" } } }
+    });
+}
+
+function recordPayment() {
+    const si     = parseInt(document.getElementById("fStudent").value);
+    const term   = document.getElementById("fTerm").value;
+    const amount = parseInt(document.getElementById("fAmount").value);
+    const paid   = parseInt(document.getElementById("fPaid").value);
+    const due    = document.getElementById("fDue").value;
+    if (!amount || isNaN(paid) || !due) return toast("Fill all fields", "error");
+
+    const fees = getFees();
+    const existing = fees.findIndex(f => f.studentIndex === si && f.term === term);
+    const entry = { studentIndex: si, term, amount, paid, dueDate: due, status: feeStatus(amount, paid) };
+    if (existing >= 0) fees[existing] = entry; else fees.push(entry);
+    saveFees(fees);
+
+    // Notify parent if unpaid/partial
+    if (paid < amount) {
+        const allUsers = JSON.parse(localStorage.getItem("users")) || [];
+        allUsers.filter(u => u.role === "parent").forEach(u =>
+            addNotification(u.email, "Fee Reminder", `${term} fee balance: KSh ${(amount-paid).toLocaleString()}`, "warning")
+        );
+    }
+
+    toast("Payment recorded!");
+    render();
+}
+
+function deleteFee(i) {
+    if (!confirm("Delete this fee record?")) return;
+    const fees = getFees(); fees.splice(i, 1); saveFees(fees);
+    render(); toast("Deleted", "info");
+}
+
+render();
+</script>
+</body>
+</html>

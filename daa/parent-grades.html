@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Grades — Parent</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1>Grades Report</h1>
+
+        <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;">
+            <div style="flex:1;min-width:280px;">
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Subject</th><th>Score</th><th>Grade</th><th>Remarks</th></tr></thead>
+                        <tbody id="gradesTable"></tbody>
+                        <tfoot id="gradesFoot"></tfoot>
+                    </table>
+                </div>
+            </div>
+            <div style="flex:1;min-width:280px;">
+                <canvas id="gradesChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+const parentUser = initPage("parent", "parent-grades.html");
+const CHILD_INDEX = getLinkedStudentIndex(parentUser.email);
+const subjects = ["Mathematics", "English", "Science", "History", "Geography", "Kiswahili"];
+const remarks = score => score >= 90 ? "Excellent" : score >= 80 ? "Very Good" : score >= 70 ? "Good" : score >= 60 ? "Average" : "Needs Improvement";
+
+const scores = subjects.map(sub => {
+    const saved = JSON.parse(localStorage.getItem("grades_" + sub)) || {};
+    return saved[CHILD_INDEX] !== undefined && saved[CHILD_INDEX] !== "" ? Number(saved[CHILD_INDEX]) : null;
+});
+
+const validScores = scores.filter(s => s !== null);
+const avg = validScores.length > 0 ? (validScores.reduce((a,b) => a+b, 0) / validScores.length).toFixed(1) : null;
+
+document.getElementById("gradesTable").innerHTML = subjects.map((sub, i) =>
+    `<tr><td>${esc(sub)}</td><td>${scores[i] !== null ? scores[i] : "—"}</td><td>${scores[i] !== null ? letterGrade(scores[i]) : "—"}</td><td>${scores[i] !== null ? remarks(scores[i]) : "—"}</td></tr>`
+).join("");
+
+document.getElementById("gradesFoot").innerHTML = avg !== null
+    ? `<tr><th>Average</th><th>${avg}</th><th>${letterGrade(Number(avg))}</th><th></th></tr>` : "";
+
+new Chart(document.getElementById("gradesChart"), {
+    type: "radar",
+    data: {
+        labels: subjects,
+        datasets: [{ label: "Scores", data: scores.map(s => s || 0), backgroundColor: "rgba(246,123,80,0.2)", borderColor: "#F67B50" }]
+    }
+});
+</script>
+</body>
+</html>
+

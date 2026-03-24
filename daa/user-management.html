@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>User Management</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1><i class="fa-solid fa-users-gear"></i> User Management</h1>
+
+        <div class="form-panel">
+            <h3>Add New User</h3>
+            <div class="form-row">
+                <input id="newName"  type="text"     placeholder="Full Name">
+                <input id="newEmail" type="email"    placeholder="Email">
+                <input id="newPass"  type="password" placeholder="Password (min 6)">
+                <select id="newRole">
+                    <option value="admin">Admin</option>
+                    <option value="teacher">Teacher</option>
+                    <option value="parent" selected>Parent</option>
+                </select>
+                <button class="btn btn-blue" onclick="addUser()">Add User</button>
+            </div>
+        </div>
+
+        <div class="form-panel">
+            <h3>Link Parent to Student</h3>
+            <div class="form-row">
+                <select id="linkParent"></select>
+                <select id="linkStudent"></select>
+                <button class="btn btn-blue" onclick="doLink()">Link</button>
+            </div>
+        </div>
+
+        <div class="topbar">
+            <h2 style="margin:0;">All Users</h2>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <div class="search-box">
+                    <i class="fa-solid fa-search" style="color:#9ca3af;"></i>
+                    <input id="userSearch" type="text" placeholder="Search..." oninput="renderUsers()">
+                </div>
+                <button class="btn btn-blue no-print" onclick="doExport()"><i class="fa-solid fa-download"></i> Export CSV</button>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Role</th><th>Linked Student</th><th>Actions</th></tr></thead>
+                <tbody id="usersTable"></tbody>
+            </table>
+            <div class="pagination" id="usersPagination"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+initPage("admin", "user-management.html");
+
+let currentPage = 1;
+const PER_PAGE = 10;
+
+function getUsers() { return JSON.parse(localStorage.getItem("users")) || []; }
+
+function populateDropdowns() {
+    const users    = getUsers();
+    const students = getStudents();
+    const parents  = users.filter(u => u.role === "parent");
+    document.getElementById("linkParent").innerHTML =
+        parents.map((p, i) => `<option value="${esc(p.email)}">${esc(p.name)}</option>`).join("") ||
+        `<option disabled>No parents</option>`;
+    document.getElementById("linkStudent").innerHTML =
+        students.map((s, i) => `<option value="${i}">${esc(s.name)} (${esc(s.grade)})</option>`).join("");
+}
+
+function getFiltered() {
+    const q = document.getElementById("userSearch").value.toLowerCase();
+    return getUsers().filter(u => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.includes(q));
+}
+
+function renderUsers(page) {
+    if (page !== undefined) currentPage = page;
+    const filtered = getFiltered();
+    const { items, page: p, pages, total } = paginate(filtered, currentPage, PER_PAGE);
+    currentPage = p;
+    const students = getStudents();
+    const links    = getParentStudentLinks();
+    document.getElementById("usersTable").innerHTML = items.map((u, i) => {
+        const linked = u.role === "parent" && links[u.email] !== undefined
+            ? esc(students[links[u.email]]?.name || "Unknown") : "-";
+        return `<tr>
+            <td>${(currentPage - 1) * PER_PAGE + i + 1}</td>
+            <td>${esc(u.name)}</td>
+            <td>${esc(u.email)}</td>
+            <td><span class="badge badge-blue">${esc(u.role)}</span></td>
+            <td>${linked}</td>
+            <td>
+                <button class="btn btn-yellow" onclick="resetPassword('${esc(u.email)}')">Reset PW</button>
+                <button class="btn btn-red" onclick="deleteUser('${esc(u.email)}')" style="margin-left:4px;">Delete</button>
+            </td>
+        </tr>`;
+    }).join("") || `<tr><td colspan="6" style="text-align:center;color:#9ca3af;">No users found</td></tr>`;
+    renderPagination("usersPagination", currentPage, pages, total, PER_PAGE, "renderUsers");
+}
+
+function addUser() {
+    const name  = document.getElementById("newName").value.trim();
+    const email = document.getElementById("newEmail").value.trim();
+    const pass  = document.getElementById("newPass").value;
+    const role  = document.getElementById("newRole").value;
+    if (!name || !email || !pass) return toast("Fill all fields", "error");
+    if (pass.length < 6) return toast("Password min 6 chars", "error");
+    const users = getUsers();
+    if (users.find(u => u.email === email)) return toast("Email already exists", "error");
+    users.push({ name, email, password: hashPassword(pass), role });
+    localStorage.setItem("users", JSON.stringify(users));
+    toast("User added");
+    document.getElementById("newName").value = "";
+    document.getElementById("newEmail").value = "";
+    document.getElementById("newPass").value = "";
+    populateDropdowns();
+    renderUsers(1);
+}
+
+function resetPassword(email) {
+    const newPass = prompt("New password for " + email + " (min 6 chars):");
+    if (!newPass) return;
+    if (newPass.length < 6) return toast("Password min 6 chars", "error");
+    const users = getUsers();
+    const idx = users.findIndex(u => u.email === email);
+    if (idx === -1) return toast("User not found", "error");
+    users[idx].password = hashPassword(newPass);
+    localStorage.setItem("users", JSON.stringify(users));
+    toast("Password reset for " + email);
+}
+
+function deleteUser(email) {
+    if (!confirm("Delete " + email + "? Cannot be undone.")) return;
+    const current = JSON.parse(localStorage.getItem("currentUser"));
+    if (current && current.email === email) return toast("Cannot delete yourself", "error");
+    let users = getUsers().filter(u => u.email !== email);
+    localStorage.setItem("users", JSON.stringify(users));
+    toast("User deleted");
+    populateDropdowns();
+    renderUsers(1);
+}
+
+function doLink() {
+    const parentEmail   = document.getElementById("linkParent").value;
+    const studentIndex  = document.getElementById("linkStudent").value;
+    if (!parentEmail) return toast("No parent selected", "error");
+    linkParentToStudent(parentEmail, studentIndex);
+    toast("Linked successfully");
+    renderUsers();
+}
+
+function doExport() {
+    const users    = getFiltered();
+    const students = getStudents();
+    const links    = getParentStudentLinks();
+    exportCSV(
+        ["Name", "Email", "Role", "Linked Student"],
+        users.map(u => [
+            u.name, u.email, u.role,
+            u.role === "parent" && links[u.email] !== undefined ? (students[links[u.email]]?.name || "") : ""
+        ]),
+        "users.csv"
+    );
+}
+
+populateDropdowns();
+renderUsers();
+</script>
+</body>
+</html>

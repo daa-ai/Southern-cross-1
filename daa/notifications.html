@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Notifications</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+
+        <div class="topbar">
+            <h1 style="margin:0;">Notifications</h1>
+            <button onclick="markAll()" style="width:auto;padding:8px 16px;">Mark all as read</button>
+        </div>
+
+        <div class="table-wrap" id="notifList"></div>
+    </div>
+</div>
+
+<script>
+const me = initPage(null, "notifications.html");
+
+const iconMap = {
+    info:    { icon: "fa-info-circle",    color: "#F67B50" },
+    message: { icon: "fa-message",        color: "#FBAA60" },
+    warning: { icon: "fa-triangle-exclamation", color: "#A82810" },
+    success: { icon: "fa-circle-check",   color: "#16a34a" }
+};
+
+function timeAgo(iso) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return m + "m ago";
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + "h ago";
+    return Math.floor(h / 24) + "d ago";
+}
+
+function render() {
+    const notifs = getNotifications(me.email);
+    if (!notifs.length) {
+        document.getElementById("notifList").innerHTML = `<div style="padding:40px;text-align:center;color:#9ca3af;"><i class="fa-solid fa-bell-slash" style="font-size:40px;margin-bottom:10px;display:block;"></i>No notifications yet</div>`;
+        return;
+    }
+    document.getElementById("notifList").innerHTML = notifs.map(n => {
+        const ic = iconMap[n.type] || iconMap.info;
+        return `<div class="notif-item ${n.read ? '' : 'unread'}" onclick="markOne('${n.id}')">
+            <div class="notif-icon"><i class="fa-solid ${ic.icon}" style="color:${ic.color};"></i></div>
+            <div class="notif-content">
+                <div class="notif-title">${esc(n.title)}</div>
+                <div class="notif-body">${esc(n.body)}</div>
+                <div class="notif-time">${timeAgo(n.time)}</div>
+            </div>
+            ${!n.read ? '<div style="width:8px;height:8px;border-radius:50%;background:#F67B50;flex-shrink:0;margin-top:6px;"></div>' : ''}
+        </div>`;
+    }).join("");
+}
+
+function markAll() {
+    markAllRead(me.email);
+    render();
+    document.getElementById("sidebar").innerHTML = buildSidebar(me.role, "notifications.html");
+    toast("All notifications marked as read");
+}
+
+function markOne(id) {
+    const notifs = getNotifications(me.email).map(n => n.id == id ? { ...n, read: true } : n);
+    localStorage.setItem("notifs_" + me.email, JSON.stringify(notifs));
+    render();
+}
+
+// Seed some demo notifications if empty
+if (!getNotifications(me.email).length) {
+    addNotification(me.email, "Welcome to SchoolSys!", "Your account is set up and ready to use.", "success");
+    addNotification(me.email, "Mid-Term Exams Scheduled", "Exams begin January 20th. Check the timetable.", "info");
+    if (me.role === "parent") addNotification(me.email, "Fee Reminder", "Term 1 fee is due by January 31st.", "warning");
+    if (me.role === "teacher") addNotification(me.email, "Staff Meeting", "Friday at 4 PM in the main hall.", "info");
+    render();
+} else {
+    render();
+}
+</script>
+</body>
+</html>

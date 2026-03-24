@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Redirecting...</title>
+    <script src="js/utils.js"></script>
+    <script src="js/auth.js"></script>
+    <script>
+        const u = JSON.parse(localStorage.getItem("currentUser"));
+        if (!u) window.location.href = "login.html";
+        else if (u.role === "admin")   window.location.href = "admin.html";
+        else if (u.role === "teacher") window.location.href = "teacher.html";
+        else                           window.location.href = "parent.html";
+    </script>
+</head>
+<body></body>
+</html>

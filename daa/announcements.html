@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Announcements</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1>Announcements</h1>
+
+        <div id="postForm"></div>
+
+        <div class="topbar" style="margin-top:10px;">
+            <h2 style="margin:0;">All Announcements</h2>
+            <select id="filterTarget" style="width:auto;" onchange="render()">
+                <option value="all">All</option>
+                <option value="teacher">Teachers</option>
+                <option value="parent">Parents</option>
+            </select>
+        </div>
+
+        <div id="announcementList"></div>
+    </div>
+</div>
+
+<script>
+const me = initPage(null, "announcements.html");
+
+function timeAgo(iso) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return m + "m ago";
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + "h ago";
+    return new Date(iso).toLocaleDateString();
+}
+
+// Show post form only for admin
+if (me.role === "admin") {
+    document.getElementById("postForm").innerHTML = `
+        <div class="form-panel">
+            <h3>Post Announcement</h3>
+            <label>Title</label>
+            <input id="aTitle" type="text" placeholder="Announcement title">
+            <label>Message</label>
+            <textarea id="aBody" rows="3" style="width:100%;padding:10px;border:1px solid #FBC490;border-radius:6px;font-family:inherit;font-size:14px;resize:vertical;background:#fff8f4;"></textarea>
+            <label>Target Audience</label>
+            <select id="aTarget" style="width:auto;">
+                <option value="all">Everyone</option>
+                <option value="teacher">Teachers only</option>
+                <option value="parent">Parents only</option>
+            </select>
+            <button onclick="postAnnouncement()" style="margin-top:12px;width:auto;padding:10px 24px;">Post</button>
+        </div>`;
+}
+
+function render() {
+    const filter = document.getElementById("filterTarget").value;
+    let list = getAnnouncements();
+    if (me.role !== "admin") list = list.filter(a => a.target === "all" || a.target === me.role);
+    if (filter !== "all") list = list.filter(a => a.target === filter || a.target === "all");
+
+    document.getElementById("announcementList").innerHTML = list.length
+        ? list.map(a => `
+            <div class="announcement-card">
+                <h3>${esc(a.title)}</h3>
+                <p>${esc(a.body)}</p>
+                <div class="announcement-meta">
+                    <span><i class="fa-solid fa-user"></i> ${esc(a.author)}</span>
+                    <span><i class="fa-solid fa-clock"></i> ${timeAgo(a.time)}</span>
+                    <span><i class="fa-solid fa-users"></i> ${a.target === "all" ? "Everyone" : a.target.charAt(0).toUpperCase() + a.target.slice(1) + "s"}</span>
+                    ${me.role === "admin" ? `<span style="margin-left:auto;cursor:pointer;color:#A82810;" onclick="deleteAnnouncement(${a.id})"><i class="fa-solid fa-trash"></i> Delete</span>` : ""}
+                </div>
+            </div>`)
+        .join("")
+        : `<div style="padding:40px;text-align:center;color:#9ca3af;"><i class="fa-solid fa-bullhorn" style="font-size:40px;margin-bottom:10px;display:block;"></i>No announcements yet</div>`;
+}
+
+function postAnnouncement() {
+    const title = document.getElementById("aTitle").value.trim();
+    const body  = document.getElementById("aBody").value.trim();
+    const target = document.getElementById("aTarget").value;
+    if (!title || !body) return toast("Fill title and message", "error");
+
+    const list = getAnnouncements();
+    list.unshift({ id: Date.now(), title, body, author: me.name, target, time: new Date().toISOString() });
+    saveAnnouncements(list);
+
+    // Notify relevant users
+    const users = JSON.parse(localStorage.getItem("users")) || [];
+    users.forEach(u => {
+        if (target === "all" || u.role === target) {
+            addNotification(u.email, "📢 " + title, body.substring(0, 80), "info");
+        }
+    });
+
+    document.getElementById("aTitle").value = "";
+    document.getElementById("aBody").value = "";
+    toast("Announcement posted!");
+    render();
+}
+
+function deleteAnnouncement(id) {
+    if (!confirm("Delete this announcement?")) return;
+    saveAnnouncements(getAnnouncements().filter(a => a.id !== id));
+    render();
+    toast("Deleted", "info");
+}
+
+render();
+</script>
+</body>
+</html>

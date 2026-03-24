@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Classes</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1><i class="fa-solid fa-door-open"></i> Classes</h1>
+
+        <div class="form-panel">
+            <h3 id="formTitle">Add Class</h3>
+            <div class="form-row">
+                <select id="clsForm">
+                    <option value="Form 1">Form 1</option>
+                    <option value="Form 2">Form 2</option>
+                    <option value="Form 3">Form 3</option>
+                    <option value="Form 4">Form 4</option>
+                </select>
+                <input id="clsStream"   type="text" placeholder="Stream (e.g. A, B, North)">
+                <input id="clsTeacher"  type="text" placeholder="Class Teacher">
+                <button class="btn btn-blue" onclick="saveClass()">Save</button>
+                <button class="btn" id="cancelBtn" style="display:none;background:#9ca3af;" onclick="cancelEdit()">Cancel</button>
+            </div>
+        </div>
+
+        <div class="topbar">
+            <h2 style="margin:0;">All Classes</h2>
+            <button class="btn btn-blue no-print" onclick="doExport()"><i class="fa-solid fa-download"></i> Export CSV</button>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>#</th><th>Class Name</th><th>Form</th><th>Stream</th><th>Class Teacher</th><th>Students</th><th>Actions</th></tr></thead>
+                <tbody id="classesTable"></tbody>
+            </table>
+            <div class="pagination" id="classesPagination"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+initPage("admin", "classes.html");
+
+let editId = null;
+let currentPage = 1;
+const PER_PAGE = 10;
+
+function countStudents(className) {
+    return getStudents().filter(s => s.grade === className.split(" ").slice(0,2).join(" ") || s.grade === className).length;
+}
+
+function renderClasses(page) {
+    if (page !== undefined) currentPage = page;
+    const cls = getClasses();
+    const { items, page: p, pages, total } = paginate(cls, currentPage, PER_PAGE);
+    currentPage = p;
+    const students = getStudents();
+    document.getElementById("classesTable").innerHTML = items.map((c, i) => {
+        const count = students.filter(s => s.grade === c.form).length;
+        return `<tr>
+            <td>${(currentPage - 1) * PER_PAGE + i + 1}</td>
+            <td><strong>${esc(c.name)}</strong></td>
+            <td>${esc(c.form)}</td>
+            <td>${esc(c.stream)}</td>
+            <td>${esc(c.classTeacher || "-")}</td>
+            <td><span class="badge badge-blue">${count}</span></td>
+            <td>
+                <button class="btn btn-yellow" onclick="editClass(${c.id})">Edit</button>
+                <button class="btn btn-red" onclick="deleteClass(${c.id})" style="margin-left:4px;">Delete</button>
+            </td>
+        </tr>`;
+    }).join("") || `<tr><td colspan="7" style="text-align:center;color:#9ca3af;">No classes yet</td></tr>`;
+    renderPagination("classesPagination", currentPage, pages, total, PER_PAGE, "renderClasses");
+}
+
+function saveClass() {
+    const form    = document.getElementById("clsForm").value;
+    const stream  = document.getElementById("clsStream").value.trim();
+    const teacher = document.getElementById("clsTeacher").value.trim();
+    if (!stream) return toast("Stream is required", "error");
+    const name = form + (stream ? " " + stream : "");
+    const cls  = getClasses();
+    if (editId !== null) {
+        const idx = cls.findIndex(c => c.id === editId);
+        if (idx !== -1) { cls[idx].form = form; cls[idx].stream = stream; cls[idx].name = name; cls[idx].classTeacher = teacher; }
+        toast("Class updated");
+    } else {
+        const maxId = cls.reduce((m, c) => Math.max(m, c.id), 0);
+        cls.push({ id: maxId + 1, name, form, stream, classTeacher: teacher });
+        toast("Class added");
+    }
+    saveClasses(cls);
+    cancelEdit();
+    renderClasses();
+}
+
+function editClass(id) {
+    const c = getClasses().find(c => c.id === id);
+    if (!c) return;
+    editId = id;
+    document.getElementById("clsForm").value    = c.form;
+    document.getElementById("clsStream").value  = c.stream;
+    document.getElementById("clsTeacher").value = c.classTeacher;
+    document.getElementById("formTitle").textContent = "Edit Class";
+    document.getElementById("cancelBtn").style.display = "";
+}
+
+function deleteClass(id) {
+    if (!confirm("Delete this class?")) return;
+    saveClasses(getClasses().filter(c => c.id !== id));
+    toast("Class deleted");
+    renderClasses();
+}
+
+function cancelEdit() {
+    editId = null;
+    document.getElementById("clsStream").value  = "";
+    document.getElementById("clsTeacher").value = "";
+    document.getElementById("formTitle").textContent = "Add Class";
+    document.getElementById("cancelBtn").style.display = "none";
+}
+
+function doExport() {
+    exportCSV(["Name","Form","Stream","Class Teacher"], getClasses().map(c => [c.name, c.form, c.stream, c.classTeacher]), "classes.csv");
+}
+
+renderClasses();
+</script>
+</body>
+</html>

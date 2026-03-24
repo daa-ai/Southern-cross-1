@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Child — Parent</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1>My Child</h1>
+
+        <div style="display:flex;gap:20px;flex-wrap:wrap;">
+            <div class="card-box" style="max-width:280px;text-align:center;">
+                <div class="avatar" style="margin:0 auto 10px;" id="childAvatar"></div>
+                <h2 style="margin:6px 0 4px;" id="childName"></h2>
+                <p style="margin:3px 0;color:#6b7280;font-size:14px;" id="childGrade"></p>
+                <p style="margin:3px 0;color:#6b7280;font-size:14px;">Student ID: #20240012</p>
+                <p style="margin:3px 0;color:#6b7280;font-size:14px;">Class Teacher: Mr. Johnson</p>
+            </div>
+
+            <div style="flex:1;min-width:250px;">
+                <div class="cards" id="statCards"></div>
+            </div>
+        </div>
+
+        <h2 style="margin-top:30px;">Recent Notices</h2>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Date</th><th>Subject</th><th>Message</th></tr></thead>
+                <tbody>
+                    <tr><td>2024-01-15</td><td>Attendance</td><td>Your child was absent on Jan 12.</td></tr>
+                    <tr><td>2024-01-10</td><td>Exam</td><td>Mid-term exams start Jan 20.</td></tr>
+                    <tr><td>2024-01-05</td><td>Fee</td><td>Term 1 fee due by Jan 31.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+const parentUser = initPage("parent", "my-child.html");
+const CHILD_INDEX = getLinkedStudentIndex(parentUser.email);
+const students = getStudents();
+const child = students[CHILD_INDEX];
+
+document.getElementById("childAvatar").textContent = child.name.charAt(0).toUpperCase();
+document.getElementById("childName").textContent = child.name;
+document.getElementById("childGrade").textContent = "Grade: " + child.grade;
+
+const attStats = getAttendanceStats(CHILD_INDEX);
+const avg = getAvgScore(CHILD_INDEX);
+
+document.getElementById("statCards").innerHTML = `
+    <div class="card-box"><i class="fa-solid fa-calendar-check"></i><h3>Attendance</h3><p>${attStats.total > 0 ? attStats.pct + "%" : "—"}</p></div>
+    <div class="card-box"><i class="fa-solid fa-star"></i><h3>Avg Grade</h3><p>${avg !== null ? letterGrade(avg) : "—"}</p></div>
+    <div class="card-box"><i class="fa-solid fa-triangle-exclamation"></i><h3>Absent</h3><p>${attStats.Absent}</p></div>`;
+</script>
+</body>
+</html>
+

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Panel</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/data.js"></script>
+
+<div class="container">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+
+        <div class="topbar">
+            <h1 style="margin:0;">Welcome, <span id="welcomeUser"></span></h1>
+        </div>
+
+        <div class="cards" id="statCards"></div>
+
+        <canvas id="myChart" style="margin-bottom:30px;max-height:300px;"></canvas>
+
+        <div class="topbar">
+            <h2 style="margin:0;">All Users</h2>
+            <div class="search-box">
+                <i class="fa-solid fa-search" style="color:#9ca3af;"></i>
+                <input id="userSearch" type="text" placeholder="Search users..." oninput="renderUsers()">
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
+                <tbody id="usersTable"></tbody>
+            </table>
+            <div class="pagination" id="usersPagination"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+const user = initPage("admin", "admin.html");
+document.getElementById("welcomeUser").textContent = user.name;
+
+const students = getStudents();
+const teachers = getTeachers();
+let allUsers = JSON.parse(localStorage.getItem("users")) || [];
+const parents = allUsers.filter(u => u.role === "parent");
+
+document.getElementById("statCards").innerHTML = `
+    <div class="card-box"><i class="fa-solid fa-user-graduate"></i><h3>Students</h3><p>${students.length}</p></div>
+    <div class="card-box"><i class="fa-solid fa-chalkboard-teacher"></i><h3>Teachers</h3><p>${teachers.length}</p></div>
+    <div class="card-box"><i class="fa-solid fa-book"></i><h3>Subjects</h3><p>${getSubjects().length}</p></div>
+    <div class="card-box"><i class="fa-solid fa-users"></i><h3>Parents</h3><p>${parents.length}</p></div>`;
+
+new Chart(document.getElementById("myChart"), {
+    type: "bar",
+    data: {
+        labels: ["Students", "Teachers", "Parents"],
+        datasets: [{ label: "School Overview", data: [students.length, teachers.length, parents.length], backgroundColor: "#F67B50" }]
+    },
+    options: { plugins: { legend: { display: false } } }
+});
+
+let currentPage = 1;
+const PER_PAGE = 10;
+
+function getFiltered() {
+    const q = document.getElementById("userSearch").value.toLowerCase();
+    allUsers = JSON.parse(localStorage.getItem("users")) || [];
+    return allUsers.filter(u => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.includes(q));
+}
+
+function renderUsers(page) {
+    if (page !== undefined) currentPage = page;
+    const filtered = getFiltered();
+    const { items, page: p, pages, total } = paginate(filtered, currentPage, PER_PAGE);
+    currentPage = p;
+    document.getElementById("usersTable").innerHTML = items.map((u, i) =>
+        `<tr>
+            <td>${(currentPage - 1) * PER_PAGE + i + 1}</td>
+            <td>${esc(u.name)}</td>
+            <td>${esc(u.email)}</td>
+            <td><span class="badge badge-blue">${esc(u.role)}</span></td>
+            <td>
+                <button class="btn btn-yellow" onclick="resetPassword('${esc(u.email)}')">Reset PW</button>
+                <button class="btn btn-red" onclick="deleteUser('${esc(u.email)}')" style="margin-left:4px;">Delete</button>
+            </td>
+        </tr>`
+    ).join("") || `<tr><td colspan="5" style="text-align:center;color:#9ca3af;">No users found</td></tr>`;
+    renderPagination("usersPagination", currentPage, pages, total, PER_PAGE, "renderUsers");
+}
+
+function resetPassword(email) {
+    const newPass = prompt("Enter new password for " + email + " (min 6 chars):");
+    if (!newPass) return;
+    if (newPass.length < 6) return toast("Password must be at least 6 characters", "error");
+    const users = JSON.parse(localStorage.getItem("users")) || [];
+    const idx = users.findIndex(u => u.email === email);
+    if (idx === -1) return toast("User not found", "error");
+    users[idx].password = hashPassword(newPass);
+    localStorage.setItem("users", JSON.stringify(users));
+    toast("Password reset for " + email);
+}
+
+function deleteUser(email) {
+    if (!confirm("Delete user " + email + "? This cannot be undone.")) return;
+    const current = JSON.parse(localStorage.getItem("currentUser"));
+    if (current && current.email === email) return toast("Cannot delete yourself", "error");
+    let users = JSON.parse(localStorage.getItem("users")) || [];
+    users = users.filter(u => u.email !== email);
+    localStorage.setItem("users", JSON.stringify(users));
+    toast("User deleted");
+    renderUsers(1);
+}
+
+renderUsers();
+</script>
+</body>
+</html>
